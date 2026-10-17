@@ -1,29 +1,28 @@
 #include "stm32f10x.h"
 #include "ESP8266.h"
-#include "Serial.h"     /* USART1 调试打印：Serial_SendString（照你现有 Serial.h 的实际函数名改） */
-#include "Delay.h"      /* Delay_ms：等待用 */
+#include "Serial.h"     /* USART1 调试日志输出 */
+#include "Delay.h"
 #include <string.h>
 #include <stdio.h>
 
-/* 接收缓冲区：Serial2.c 里定义，中断往里存，这里只读 */
+/* 接收缓冲区：Serial2.c 中定义，由 USART2 接收中断写入 */
 extern char esp_rx_buffer[ESP_RX_BUFFER_SIZE];
 extern volatile uint16_t esp_rx_len;
 
 /*
- * ESP_ClearRx —— 清空接收缓冲区
- * 每发一条新指令前必须调用：防止上一条指令的回复残留在缓冲区里，
- * 导致 strstr 找到的是"旧回复"里的关键字，判断出错。
+ * 清空接收缓冲区。
+ * 每条 AT 指令发送前调用，避免上一条指令的残留应答干扰关键字匹配。
+ * 清空期间短暂关闭接收中断，防止清零操作被中断打断。
  */
 static void ESP_ClearRx(void)
 {
+    USART_ITConfig(USART2, USART_IT_RXNE, DISABLE);
     esp_rx_len = 0;
     esp_rx_buffer[0] = '\0';
+    USART_ITConfig(USART2, USART_IT_RXNE, ENABLE);
 }
 
-/*
- * ESP_SendString —— 把一个字符串经 USART2 原样发出
- * （就是你 Serial.c 里 SendString 的 USART2 版）
- */
+/* 经 USART2 发送一个以 '\0' 结尾的字符串 */
 static void ESP_SendString(const char *str)
 {
     uint16_t i = 0;
@@ -33,16 +32,13 @@ static void ESP_SendString(const char *str)
         USART_SendData(USART2, (uint8_t)str[i]);
         while (USART_GetFlagStatus(USART2, USART_FLAG_TXE) == RESET)
         {
-            /* 等发送寄存器腾空，再发下一个字节 */
+            /* 等待发送寄存器空闲 */
         }
         i = i + 1;
     }
 }
 
-/*
- * ESP_FindInRx —— 在接收缓冲区里找关键字
- * 找到返回 1，没找到返回 0
- */
+/* 在接收缓冲区中查找子串，找到返回 1，未找到返回 0 */
 static uint8_t ESP_FindInRx(const char *target)
 {
     if (strstr(esp_rx_buffer, target) != NULL)
@@ -52,17 +48,24 @@ static uint8_t ESP_FindInRx(const char *target)
     return 0;
 }
 
+/*
+ * 发送一条 AT 指令并等待应答。
+ * ESP 的应答异步到达，因此发送后在超时时间内轮询接收缓冲区匹配关键字。
+ *
+ * 参数：cmd        指令内容（不含 CRLF，函数内部自动追加）
+ *       expect     应答中必须出现的关键字
+ *       timeout_ms 超时时间（毫秒）
+ * 返回：0 匹配成功，1 超时
+ */
 uint8_t ESP_SendCmd(const char *cmd, const char *expect, uint16_t timeout_ms)
 {
     uint16_t waited_ms = 0;
 
     ESP_ClearRx();
 
-    /* 发指令本体，再补 AT 指令规定的回车换行（缺了 ESP 直接不理你） */
     ESP_SendString(cmd);
-    ESP_SendString("\r\n");
+    ESP_SendString("\r\n");     /* AT 指令必须以 CRLF 结尾 */
 
-    /* 每毫秒查一次缓冲区，查到关键字立刻返回成功，超时返回失败 */
     while (waited_ms < timeout_ms)
     {
         if (ESP_FindInRx(expect) == 1)
@@ -76,18 +79,28 @@ uint8_t ESP_SendCmd(const char *cmd, const char *expect, uint16_t timeout_ms)
     return 1;
 }
 
+/*
+ * 初始化 ESP8266：AT 握手 → STA 模式 → 连接 WiFi → 连接 TCP 服务器。
+ *
+ * 返回：0 全部成功；1~4 为失败步骤编号（1=AT 2=CWMODE 3=CWJAP 4=CIPSTART）
+ *
+ * 固件兼容性说明：
+ * - 部分固件在模式未变化时对 CWMODE 回复 "no change" 而非 "OK"，两者均视为成功
+ * - CWJAP 刚完成时模块短暂忙碌，立即发送下一条指令会被
+ *   "busy p..." 吞掉，故连接 TCP 前延时 1 秒并重试 3 次
+ */
 uint8_t ESP_Init(const char *wifi_name, const char *wifi_password,
                  const char *server_ip, uint16_t server_port)
 {
-    //第 1 步：AT 握手
-    if(ESP_SendCmd("AT", "OK", 2000) != 0)
+    /* 第 1 步：AT 握手，确认模块与串口链路正常 */
+    if (ESP_SendCmd("AT", "OK", 2000) != 0)
     {
         Serial_SendString("ESP: AT failed\r\n");
         return 1;
     }
     Serial_SendString("ESP: AT OK\r\n");
-    //第 2 步：设为 STA 模式（当客户端）
-    /* 有的固件在模式不变时会回 "no change" 而不带 OK，所以两个关键字都要等 */
+
+    /* 第 2 步：设置为 STA 模式（客户端） */
     ESP_ClearRx();
     ESP_SendString("AT+CWMODE=1");
     ESP_SendString("\r\n");
@@ -110,19 +123,19 @@ uint8_t ESP_Init(const char *wifi_name, const char *wifi_password,
         return 2;
     }
     Serial_SendString("ESP: CWMODE OK\r\n");
-    //第 3 步：连 WiFi
+
+    /* 第 3 步：连接 WiFi，等待获取 IP（关联与 DHCP 需要数秒） */
     char cmd[96];
     sprintf(cmd, "AT+CWJAP=\"%s\",\"%s\"", wifi_name, wifi_password);
-    if(ESP_SendCmd(cmd, "WIFI GOT IP", 20000) != 0)
+    if (ESP_SendCmd(cmd, "WIFI GOT IP", 20000) != 0)
     {
         Serial_SendString("ESP: CWJAP failed\r\n");
         return 3;
     }
     Serial_SendString("ESP: CWJAP OK\r\n");
-    //第 4 步：连 TCP 服务器
-    /* 坑：CWJAP 刚结束时 ESP 内部还在忙，立刻发 CIPSTART 会收到
-       "busy p..." 并把指令吞掉。所以先歇 1 秒，连不上再自动重试两次 */
-    Delay_ms(1000);
+
+    /* 第 4 步：建立 TCP 连接，失败自动重试 */
+    Delay_ms(1000);     /* 避开 CWJAP 之后的模块忙碌期 */
 
     char cmd2[64];
     sprintf(cmd2, "AT+CIPSTART=\"TCP\",\"%s\",%u", server_ip, server_port);
@@ -149,11 +162,18 @@ uint8_t ESP_Init(const char *wifi_name, const char *wifi_password,
     return 0;
 }
 
-uint8_t ESP_SendData(const char* data)
+/*
+ * 通过已建立的 TCP 连接发送数据（两段式）：
+ * 1. 发送 AT+CIPSEND=<长度>，等待 ">" 提示符
+ * 2. 发送数据本体——按声明的字节数原样传输，末尾不追加 CRLF
+ *
+ * 返回：0 成功，1 失败
+ */
+uint8_t ESP_SendData(const char *data)
 {
-    //第 1 段：先告诉 ESP 要发多少个字节
     char cmd[32];
     uint16_t waited_ms = 0;
+
     sprintf(cmd, "AT+CIPSEND=%u", (unsigned int)strlen(data));
     if (ESP_SendCmd(cmd, ">", 2000) != 0)
     {
@@ -162,7 +182,6 @@ uint8_t ESP_SendData(const char* data)
     }
 
     ESP_ClearRx();
-    //第 2 段：ESP_SendString(data) 把数据本体发出去
     ESP_SendString(data);
 
     while (waited_ms < 5000)
@@ -179,4 +198,3 @@ uint8_t ESP_SendData(const char* data)
 
     return 1;
 }
-
