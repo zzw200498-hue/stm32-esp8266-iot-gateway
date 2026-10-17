@@ -6,6 +6,8 @@ STM32 采集传感器数据，通过 USART2 驱动 ESP8266（AT 指令）连上�
 
 ![接线图](wiring.svg)
 
+![原理图](schematic.svg)
+
 ## 系统架构
 
 ```
