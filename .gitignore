@@ -1,0 +1,9 @@
+# Keil 构建产物（可重新生成）
+Objects/
+Listings/
+DebugConfig/
+*.uvguix.*
+*.scvd
+*.bak
+*.dep
+JLinkLog.txt
