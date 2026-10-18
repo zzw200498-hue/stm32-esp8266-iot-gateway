@@ -4,8 +4,8 @@
 #include "stm32f10x.h"
 
 /*
- * Serial2 —— USART2 专用于和 ESP8266 说话（115200）
- * USART1 继续留给电脑调试打印，两个串口互不干扰
+ * Serial2 —— ESP8266 专用串口（USART3，PB10=TX / PB11=RX，115200）
+ * PA2/PA3(USART2) 让给调试日志，两者互不干扰
  */
 
 void Serial2_Init(void);

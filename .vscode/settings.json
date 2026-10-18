@@ -1,0 +1,44 @@
+{
+  // CMake Tools 插件的配置
+  // 显式指定 cmake 路径，避免依赖 PATH 是否刷新
+  "cmake.cmakePath": "C:/Users/邹志伟/EmbeddedTools/cmake-3.31/bin/cmake.exe",
+  "cmake.sourceDirectory": "${workspaceFolder}",
+  "cmake.buildDirectory": "${workspaceFolder}/build",
+  "cmake.generator": "Ninja",
+  "cmake.configureArgs": [
+    "-DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake",
+    "-DCMAKE_BUILD_TYPE=Debug",
+    // 必须显式指定 ninja 路径，理由见 tasks.json 里的【坑 8】
+    "-DCMAKE_MAKE_PROGRAM=C:/Users/邹志伟/EmbeddedTools/ninja/ninja.exe"
+  ],
+  "cmake.configureOnOpen": false,
+
+  // 关掉 CMake Tools 自带的 IntelliSense 提供者，交给 c_cpp_properties.json 管，
+  // 否则两边打架会导致代码跳转时好时坏
+  "C_Cpp.default.configurationProvider": "ms-vscode.cpptools",
+
+  // 让 .s 汇编文件也用 C 预处理器处理（启动文件里有 #include 之类）
+  "files.associations": {
+    "*.s": "arm",
+    "*.ld": "linkerscript",
+    "*.h": "c"
+  },
+
+  // 这些是 Keil 的中间文件，别让 VSCode 搜索/收藏夹里出现
+  "files.exclude": {
+    "**/Objects": true,
+    "**/Listings": true,
+    "**/DebugConfig": true,
+    "**/*.uvguix.*": true,
+    "build": false
+  },
+  "search.exclude": {
+    "**/build": true,
+    "**/Objects": true,
+    "**/Listings": true,
+    "**/Library": false
+  },
+
+  // 保存时不要自动格式化标准库文件（会被改得面目全非）
+  "editor.formatOnSave": false
+}

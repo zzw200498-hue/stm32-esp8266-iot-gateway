@@ -32,4 +32,12 @@ uint8_t ESP_Init(const char *wifi_name, const char *wifi_password,
  */
 uint8_t ESP_SendData(const char *data);
 
+/*
+ * 查询服务器是否下发了命令（下行通道）。
+ * 服务器发来的 TCP 数据会被 ESP 包成 "+IPD,长度:内容" 送进接收缓冲，
+ * 本函数在缓冲里搜索命令表中的关键字，找到即返回并清空缓冲。
+ * 返回：1 收到命令（cmd_buf 里是命令名，如 "FAN=ON"），0 没有命令
+ */
+uint8_t ESP_GetCommand(char *cmd_buf, uint16_t buf_size);
+
 #endif

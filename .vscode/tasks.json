@@ -1,0 +1,161 @@
+{
+  "version": "2.0.0",
+  "options": {
+    "cwd": "${workspaceFolder}",
+    // 把工具目录临时塞进 PATH，这样即使刚装完工具、系统 PATH 还没刷新，也能立刻用。
+    // 注意：arm 工具链和 ST-LINK 的安装路径里带空格，直接写进 "command"
+    // 容易被拆成两段，所以统一走 PATH + 纯文件名调用，最稳。
+    "env": {
+      "PATH": "C:/Users/邹志伟/EmbeddedTools/cmake-3.31/bin;C:/Users/邹志伟/EmbeddedTools/ninja;C:/Users/邹志伟/EmbeddedTools/openocd/bin;C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin;C:/Program Files (x86)/STMicroelectronics/STM32 ST-LINK Utility/ST-LINK Utility;${env:PATH}"
+    }
+  },
+  "tasks": [
+    {
+      // 第一次打开工程、或者改了 CMakeLists.txt 之后跑这个
+      "label": "① 配置 (Configure)",
+      "type": "shell",
+      // 直接写绝对路径，不依赖 PATH 有没有刷新
+      "command": "C:/Users/邹志伟/EmbeddedTools/cmake-3.31/bin/cmake.exe",
+      "args": [
+        "-B", "build",
+        "-G", "Ninja",
+        "-DCMAKE_BUILD_TYPE=Debug",
+        "-DCMAKE_TOOLCHAIN_FILE=cmake/gcc-arm-none-eabi.cmake",
+        // 【坑 8】这一行不能省！
+        // CMake 决定用 Ninja 之后，会立刻自己去找 ninja.exe，
+        // 这一步发生在"读工具链文件"和"检测编译器"之前。
+        // 光靠 PATH 里放着 ninja 有时会找不到（尤其在中文用户名下），
+        // 所以这里直接把路径喂给它，一步到位。
+        "-DCMAKE_MAKE_PROGRAM=C:/Users/邹志伟/EmbeddedTools/ninja/ninja.exe"
+      ],
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      // 日常编译：Ctrl+Shift+B 走的就是这个。
+      // 它是"先配置 → 再编译 → 再报内存占用"三件事串起来的壳子，
+      // 单独设一个壳子是为了让三步按顺序执行、共用同一个终端面板。
+      "label": "② 构建 (Build)",
+      "dependsOrder": "sequence",
+      "dependsOn": ["②-1 编译", "②-2 内存占用"],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": []
+    },
+    {
+      // 真正的编译动作。已经是最新的时候 ninja 只会说 "no work to do."，
+      // 那是"没有文件被改动，不用重新编译"的意思，不是报错。
+      "label": "②-1 编译",
+      "type": "shell",
+      "command": "C:/Users/邹志伟/EmbeddedTools/cmake-3.31/bin/cmake.exe",
+      "args": ["--build", "build"],
+      "dependsOn": "① 配置 (Configure)",
+      "problemMatcher": {
+        "base": "$gcc",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"]
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      // 不管刚才有没有真的编译，都把固件大小打印一遍。
+      // 这样每次 Ctrl+Shift+B 都有明确回执：
+      //   text = 占用的 Flash 字节数，data = 初始化的全局变量，bss = 未初始化的全局变量
+      // 芯片上限：C8 是 Flash 64KB / RAM 20KB，CB 是 Flash 128KB / RAM 20KB
+      "label": "②-2 内存占用",
+      "type": "shell",
+      "command": "arm-none-eabi-size.exe",
+      "args": ["build/firmware.elf"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": false
+      }
+    },
+    {
+      // 烧录：直接用 OpenOCD 写 ELF，写完整块回读校验，最后复位让程序跑起来。
+      // 为什么不用 ST-LINK Utility 的命令行：它要传固件的绝对路径，
+      // 而我们的路径里有中文和空格，容易出问题；OpenOCD 这里只传
+      // build/firmware.elf 这种纯英文相对路径，稳得多。
+      //
+      // 输出里看到这两行就是真的写进去了：
+      //   ** Programming Finished **
+      //   ** Verified OK **
+      "label": "③ 烧录 (OpenOCD)",
+      "type": "shell",
+      "command": "openocd.exe",
+      "args": [
+        "-f", "interface/stlink.cfg",
+        "-f", "target/stm32f1x.cfg",
+        // program = 擦除 + 写入 + 回读比对；verify 就是逐字节校验
+        "-c", "program build/firmware.elf verify",
+        // 烧完立刻复位运行，不然程序会停在复位状态，板子上什么都不会动
+        "-c", "reset run",
+        "-c", "shutdown"
+      ],
+      "dependsOn": "② 构建 (Build)",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      // 一键完成：编译 + 烧录
+      "label": "④ 编译并烧录",
+      "dependsOrder": "sequence",
+      "dependsOn": ["② 构建 (Build)", "③ 烧录 (OpenOCD)"],
+      "problemMatcher": []
+    },
+    {
+      // 【坑 10】F5 必挂的元凶。
+      // arm-none-eabi-gdb.exe 第一次启动时，Windows 要先把整个 exe 扫一遍
+      // （杀毒软件 / Defender 首次扫描），实测要 8~10 秒才交出 prompt。
+      // 而 Cortex-Debug 只等 5 秒，等不到就认定 GDB 挂了，直接把 gdb-server 杀掉，
+      // 终端里就出现 "gdb-server program client error Error: read ECONNRESET"。
+      //
+      // 解决办法：F5 之前先空跑一次 gdb，把它"预热"。预热后再启动只要 0.7 秒。
+      // 这一步已经串进「⑥ 调试准备」里了，不用你手动执行。
+      "label": "⑤ 预热 GDB",
+      "type": "shell",
+      "command": "arm-none-eabi-gdb.exe",
+      "args": ["--batch"],
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "silent",
+        "panel": "shared",
+        "clear": false
+      }
+    },
+    {
+      // launch.json 的 preLaunchTask 指的就是这个：
+      // 先编译，再预热 GDB，然后才启动调试器
+      "label": "⑥ 调试准备（F5 自动调用）",
+      "dependsOrder": "sequence",
+      "dependsOn": ["② 构建 (Build)", "⑤ 预热 GDB"],
+      "problemMatcher": []
+    },
+    {
+      // 想从头来过的时候用
+      "label": "清理 (Clean)",
+      "type": "shell",
+      "command": "C:/Users/邹志伟/EmbeddedTools/cmake-3.31/bin/cmake.exe",
+      "args": ["--build", "build", "--target", "clean"],
+      "problemMatcher": []
+    },
+    {
+      "label": "彻底清理 (删除 build 目录)",
+      "type": "shell",
+      "command": "C:/Users/邹志伟/EmbeddedTools/cmake-3.31/bin/cmake.exe",
+      "args": ["-E", "rm", "-rf", "build"],
+      "problemMatcher": []
+    }
+  ]
+}

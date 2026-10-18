@@ -7,3 +7,9 @@ DebugConfig/
 *.bak
 *.dep
 JLinkLog.txt
+
+# 私有配置（真实 WiFi/IP），仓库里只有 config.h.example 模板
+User/config.h
+
+# VSCode/GCC 构建产物
+build/

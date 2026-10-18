@@ -1,0 +1,17 @@
+#ifndef __CONFIG_H
+#define __CONFIG_H
+
+/*
+ * config.h.example —— 运行环境配置模板
+ * 使用方法：复制本文件为 config.h（与它在同一目录），填入自己的真实值。
+ * config.h 已被 .gitignore 忽略，真实密码/IP 不会被上传到仓库。
+ */
+
+#define ENABLE_ESP     1                /* 1=开机连接 WiFi 并上传数据；0=纯本地模式 */
+#define WIFI_NAME      "your-wifi-ssid" /* 你的 WiFi 名 */
+#define WIFI_PASSWORD  "your-password"  /* 你的 WiFi 密码 */
+#define SERVER_IP      "192.168.1.100"  /* 服务器的局域网 IP */
+#define SERVER_PORT    9999             /* 服务器监听端口 */
+#define SEND_PERIOD    3                /* 每采集几次上传一次（3 次 ≈ 4.5 秒） */
+
+#endif

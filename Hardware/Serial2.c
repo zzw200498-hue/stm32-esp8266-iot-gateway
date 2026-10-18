@@ -1,33 +1,30 @@
 #include "stm32f10x.h"                  // Device header
-#include "Serial2.h"
 #include "ESP8266.h"
 
 /*
- * 接收缓冲区：由 USART2 接收中断写入，供 AT 驱动匹配应答使用。
- * volatile：该变量在中断中修改、主循环中读取。
+ * Serial2 —— ESP8266 专用串口（USART3，PB10=TX / PB11=RX，115200 8N1）
+ *
+ * 原来在 USART2(PA2/PA3)，PA2 让给调试日志后 ESP 搬到 USART3。
+ * 使能接收中断，应答写入 esp_rx_buffer 供 AT 驱动匹配。
+ * 注意：USART3 挂载在 APB1 总线。
  */
 char esp_rx_buffer[ESP_RX_BUFFER_SIZE];
 volatile uint16_t esp_rx_len = 0;
 
-/*
- * 初始化 USART2：PA2=TX（复用推挽），PA3=RX（浮空输入），
- * 115200 8N1，使能接收中断。
- * 注意：USART2 挂载在 APB1 总线（USART1 才是 APB2）。
- */
 void Serial2_Init(void)
 {
-	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART3, ENABLE);
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
 
 	GPIO_InitTypeDef GPIO_InitStructure;
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_10;
 	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-	GPIO_Init(GPIOA, &GPIO_InitStructure);
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
 
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
-	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
-	GPIO_Init(GPIOA, &GPIO_InitStructure);
+	GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
 
 	USART_InitTypeDef USART_InitStructure;
 	USART_InitStructure.USART_BaudRate = 115200;
@@ -36,25 +33,25 @@ void Serial2_Init(void)
 	USART_InitStructure.USART_Parity = USART_Parity_No;
 	USART_InitStructure.USART_StopBits = USART_StopBits_1;
 	USART_InitStructure.USART_WordLength = USART_WordLength_8b;
-	USART_Init(USART2, &USART_InitStructure);
+	USART_Init(USART3, &USART_InitStructure);
 
-	USART_ITConfig(USART2, USART_IT_RXNE, ENABLE);
+	USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);
 
 	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
 	NVIC_InitTypeDef NVIC_InitStructure;
-	NVIC_InitStructure.NVIC_IRQChannel = USART2_IRQn;
+	NVIC_InitStructure.NVIC_IRQChannel = USART3_IRQn;
 	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 1;
 	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
 	NVIC_Init(&NVIC_InitStructure);
 
-	USART_Cmd(USART2, ENABLE);
+	USART_Cmd(USART3, ENABLE);
 }
 
 void Serial2_SendByte(uint8_t Byte)
 {
-	USART_SendData(USART2, Byte);
-	while (USART_GetFlagStatus(USART2, USART_FLAG_TXE) == RESET)
+	USART_SendData(USART3, Byte);
+	while (USART_GetFlagStatus(USART3, USART_FLAG_TXE) == RESET)
 	{
 		/* 等待发送寄存器空闲 */
 	}
@@ -71,14 +68,14 @@ void Serial2_SendString(char *String)
 }
 
 /*
- * USART2 接收中断：将收到的字节追加到 esp_rx_buffer，
+ * USART3 接收中断：将收到的字节追加到 esp_rx_buffer，
  * 并保持 '\0' 结尾以便 strstr 匹配；缓冲区写满后丢弃后续字节。
  */
-void USART2_IRQHandler(void)
+void USART3_IRQHandler(void)
 {
-	if (USART_GetITStatus(USART2, USART_IT_RXNE) == SET)
+	if (USART_GetITStatus(USART3, USART_IT_RXNE) == SET)
 	{
-		uint8_t byte = USART_ReceiveData(USART2);
+		uint8_t byte = USART_ReceiveData(USART3);
 
 		if (esp_rx_len < ESP_RX_BUFFER_SIZE - 1)
 		{
@@ -87,6 +84,6 @@ void USART2_IRQHandler(void)
 			esp_rx_buffer[esp_rx_len] = '\0';
 		}
 
-		USART_ClearITPendingBit(USART2, USART_IT_RXNE);
+		USART_ClearITPendingBit(USART3, USART_IT_RXNE);
 	}
 }

@@ -1,0 +1,50 @@
+{
+  // 调试配置（Cortex-Debug 插件读取）
+  // 按 F5 就会：先编译 -> 启动 OpenOCD -> 连上 ST-Link -> 把程序烧进去 -> 停在 main 函数
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "调试 (ST-Link + OpenOCD)",
+      "type": "cortex-debug",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/build/firmware.elf",
+      "servertype": "openocd",
+      "serverpath": "C:/Users/邹志伟/EmbeddedTools/openocd/bin/openocd.exe",
+      "device": "STM32F103CB",
+      "configFiles": [
+        "interface/stlink.cfg",
+        "target/stm32f1x.cfg"
+      ],
+      // 让调试器自动停在 main 的第一行，省得按暂停
+      "runToEntryPoint": "main",
+      // 按 F5 之前先跑这个任务：编译 + 预热 GDB
+      // 预热那一步不能省，否则 GDB 冷启动超过 5 秒，会被 Cortex-Debug 判成启动失败
+      "preLaunchTask": "⑥ 调试准备（F5 自动调用）",
+      // 告诉插件去哪找 arm-none-eabi-gdb
+      "armToolchainPath": "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin",
+      // 外设寄存器查看器（能实时看 GPIOA->ODR 这类值），没有这个文件就去掉这一行
+      "svdFile": "C:/Users/邹志伟/EmbeddedTools/svd/STM32F103.svd",
+      // 想看 OpenOCD 原始日志就改成 "raw"
+      "showDevDebugOutput": "none"
+    },
+    {
+      // 程序已经在板子上跑着，想在不复位的情况下看变量/打断点，用这个
+      "name": "附加到正在运行的程序",
+      "type": "cortex-debug",
+      "request": "attach",
+      "cwd": "${workspaceFolder}",
+      "executable": "${workspaceFolder}/build/firmware.elf",
+      "servertype": "openocd",
+      "serverpath": "C:/Users/邹志伟/EmbeddedTools/openocd/bin/openocd.exe",
+      "device": "STM32F103CB",
+      "configFiles": [
+        "interface/stlink.cfg",
+        "target/stm32f1x.cfg"
+      ],
+      "armToolchainPath": "C:/Program Files (x86)/Arm GNU Toolchain arm-none-eabi/14.2 rel1/bin",
+      "svdFile": "C:/Users/邹志伟/EmbeddedTools/svd/STM32F103.svd",
+      "showDevDebugOutput": "none"
+    }
+  ]
+}

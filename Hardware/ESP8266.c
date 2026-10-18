@@ -5,7 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 
-/* 接收缓冲区：Serial2.c 中定义，由 USART2 接收中断写入 */
+/* 接收缓冲区：Serial2.c 中定义，由 USART3 接收中断写入 */
 extern char esp_rx_buffer[ESP_RX_BUFFER_SIZE];
 extern volatile uint16_t esp_rx_len;
 
@@ -16,21 +16,21 @@ extern volatile uint16_t esp_rx_len;
  */
 static void ESP_ClearRx(void)
 {
-    USART_ITConfig(USART2, USART_IT_RXNE, DISABLE);
+    USART_ITConfig(USART3, USART_IT_RXNE, DISABLE);
     esp_rx_len = 0;
     esp_rx_buffer[0] = '\0';
-    USART_ITConfig(USART2, USART_IT_RXNE, ENABLE);
+    USART_ITConfig(USART3, USART_IT_RXNE, ENABLE);
 }
 
-/* 经 USART2 发送一个以 '\0' 结尾的字符串 */
+/* 经 USART3 发送一个以 '\0' 结尾的字符串 */
 static void ESP_SendString(const char *str)
 {
     uint16_t i = 0;
 
     while (str[i] != '\0')
     {
-        USART_SendData(USART2, (uint8_t)str[i]);
-        while (USART_GetFlagStatus(USART2, USART_FLAG_TXE) == RESET)
+        USART_SendData(USART3, (uint8_t)str[i]);
+        while (USART_GetFlagStatus(USART3, USART_FLAG_TXE) == RESET)
         {
             /* 等待发送寄存器空闲 */
         }
@@ -197,4 +197,46 @@ uint8_t ESP_SendData(const char *data)
     Serial_SendString("ESP Err: Send data timeout\r\n");
 
     return 1;
+}
+
+/*
+ * 下行命令表：服务器可通过 TCP 连接直接发送这些字符串。
+ * ESP 收到 TCP 数据后会包成 "+IPD,长度:内容" 写进接收缓冲，
+ * 所以用 strstr 搜命令名即可，不用解析 +IPD 格式。
+ */
+static const char *const esp_cmd_table[] = {"FAN=ON", "FAN=OFF", "FAN=AUTO"};
+#define ESP_CMD_COUNT 3
+
+/*
+ * 函    数：查询服务器是否下发了命令
+ * 参    数：cmd_buf  命令名输出缓冲
+ *           buf_size 缓冲大小
+ * 返 回 值：1 收到命令（cmd_buf 里是命令名），0 没有命令
+ * 说    明：找到命令后立即清空接收缓冲，防止同一条命令被重复触发。
+ *           局限：若命令恰好在上传流程的清缓冲窗口到达会丢失，
+ *           命令频率低时可忽略；以后要求严格可靠再改用环形缓冲。
+ */
+uint8_t ESP_GetCommand(char *cmd_buf, uint16_t buf_size)
+{
+    uint8_t i;
+    uint16_t copy_len;
+
+    for (i = 0; i < ESP_CMD_COUNT; i++)
+    {
+        if (ESP_FindInRx(esp_cmd_table[i]) == 1)
+        {
+            /* 把命中的命令名复制给调用者 */
+            copy_len = 0;
+            while (esp_cmd_table[i][copy_len] != '\0' && copy_len < buf_size - 1)
+            {
+                cmd_buf[copy_len] = esp_cmd_table[i][copy_len];
+                copy_len = copy_len + 1;
+            }
+            cmd_buf[copy_len] = '\0';
+
+            ESP_ClearRx();      /* 命令已取走，防止重复匹配 */
+            return 1;
+        }
+    }
+    return 0;
 }
