@@ -292,16 +292,21 @@ PDF 版：[docs/schematic-lceda.pdf](docs/schematic-lceda.pdf)
 
 ### 3. 定制化 PCB 设计（立创EDA专业版）
 
-针对面包板飞线繁杂、接触不良与高频干扰问题，特别设计了定制插座 PCB，支持所有器件即插即用：
+针对面包板飞线繁杂、接触不良与高频干扰问题，特别设计了定制 PCB 底板。
 
-- **PCB 工程源码包**：[`Hardware_PCB/SmartFan_LCEDA_Project.epro2`](Hardware_PCB/SmartFan_LCEDA_Project.epro2)（可在立创EDA专业版直接打开/编辑）
+> 💡 **特别说明：全模块化插座设计（即插即用）**  
+> 本板**完全采用现成功能模块搭建**（非贴片分立元件）：  
+> STM32F103C8T6 最小系统板、ESP-01S、TB6612 电机驱动板、0.96寸 OLED 屏、DHT11 模块、CH340 串口模块、AMS1117-3.3 降压板**全部直接通过 2.54mm 排母插接**。只需一把电烙铁焊接直插排母与电容端子，新手零贴片门槛，模块坏了随时免工具拔插替换！
+
+- **PCB 工程源码包**：[`Hardware_PCB/SmartFan_LCEDA_Project.epro2`](Hardware_PCB/SmartFan_LCEDA_Project.epro2)（可在立创EDA专业版直接打开/修改/导出制版文件）
 - **BOM 物料清单**：[`Hardware_PCB/BOM_SmartFan.csv`](Hardware_PCB/BOM_SmartFan.csv)
 - **硬件设计指南**：[`Hardware_PCB/README.md`](Hardware_PCB/README.md)
 - **布线核心特性**：
+  - **45° 倒角规整走线**：消除直角反射，全板大面积顶层/底层接地覆铜（GND Flood）；
   - **动力立体分层**：电机线 MOTOR_A（顶层 25mil 红线）与 MOTOR_B（底层 25mil 蓝线）空间绝缘，彻底消除交叉短路；
-  - **主电源树加粗与就地滤波**：5V 动力线 25mil 加粗，经 100µF 贴片铝电解电容（C1）就地去耦滤波后分路供电；
+  - **主电源树加粗与就地滤波**：5V 动力线 25mil 加粗，经 100µF 直插铝电解电容（C1）就地去耦滤波后分路供电；
   - **独立双路 3.3V 隔离**：ESP8266 专享独立 AMS1117-3.3V（U8），与主控逻辑电源严格隔离，杜绝射频发射瞬间掉电重启；
-  - **OLED 边缘化布局**：屏幕移至右边缘，大面积释放板内核心走线空间。
+  - **OLED 边缘化布局**：屏幕移至右边缘，最大化释放板内核心走线空间。
 
 ![PCB 布线全貌](Hardware_PCB/pcb_layout_routed.png)
 
