@@ -290,11 +290,26 @@ make
 
 PDF 版：[docs/schematic-lceda.pdf](docs/schematic-lceda.pdf)
 
-### 3. 实物原型
+### 3. 定制化 PCB 设计（立创EDA专业版）
+
+针对面包板飞线繁杂、接触不良与高频干扰问题，特别设计了定制插座 PCB，支持所有器件即插即用：
+
+- **PCB 工程源码包**：[`Hardware_PCB/SmartFan_LCEDA_Project.epro2`](Hardware_PCB/SmartFan_LCEDA_Project.epro2)（可在立创EDA专业版直接打开/编辑）
+- **BOM 物料清单**：[`Hardware_PCB/BOM_SmartFan.csv`](Hardware_PCB/BOM_SmartFan.csv)
+- **硬件设计指南**：[`Hardware_PCB/README.md`](Hardware_PCB/README.md)
+- **布线核心特性**：
+  - **动力立体分层**：电机线 MOTOR_A（顶层 25mil 红线）与 MOTOR_B（底层 25mil 蓝线）空间绝缘，彻底消除交叉短路；
+  - **主电源树加粗与就地滤波**：5V 动力线 25mil 加粗，经 100µF 贴片铝电解电容（C1）就地去耦滤波后分路供电；
+  - **独立双路 3.3V 隔离**：ESP8266 专享独立 AMS1117-3.3V（U8），与主控逻辑电源严格隔离，杜绝射频发射瞬间掉电重启；
+  - **OLED 边缘化布局**：屏幕移至右边缘，大面积释放板内核心走线空间。
+
+![PCB 布线全貌](Hardware_PCB/pcb_layout_routed.png)
+
+### 4. 实物原型
 
 ![实物原型](docs/hardware-prototype.jpg)
 
-### 4. 最终运行效果
+### 5. 最终运行效果
 
 ![运行成功](docs/success-run.png)
 
@@ -308,6 +323,7 @@ PDF 版：[docs/schematic-lceda.pdf](docs/schematic-lceda.pdf)
 ├── System/             延时、定时器
 ├── Start/  Library/    启动文件 + 标准外设库 V3.5
 ├── cmake/  .vscode/    GCC 工具链配置 + VSCode 一键构建/烧录/调试
+├── Hardware_PCB/       定制 PCB 设计工程（立创EDA专业版 .epro2 源码包、BOM清单、布线图）
 ├── docs/               原理图（简易版/立创EDA版）、接线图、实物图、运行截图
 └── server/             Linux 服务端（epoll + 生产者消费者 + SQLite + HTTP）
     ├── include/  src/  各模块头文件与实现
